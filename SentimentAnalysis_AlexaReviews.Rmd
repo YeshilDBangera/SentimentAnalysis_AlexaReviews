@@ -5,7 +5,267 @@ date: "2022-10-22"
 output: github_document
 ---
 
+
+
+Loading packages
 ```{r}
+pacman::p_load(tidytext, tidyverse)
+pacman::p_load(quanteda)
+pacman::p_load(ggthemes)
+pacman::p_load(scales)
+
+```
+
+```{r}
+text0<-readtext::readtext("D:/END TO END/SentimentAnalysis_AlexaReviews/AlexaReview.txt")
+```
+
+
+```{r}
+text = text0 %>% 
+  str_remove_all("\n") %>% 
+  str_trim(side = c("both")) %>% 
+  str_squish() %>%
+  strsplit(split = " ") %>%
+  purrr::reduce(paste)
+
+head(text,50)
+```
+
+
+```{r}
+
+text_df <- tibble(line = 1:length(text), text = text)
+View(text_df)
+#Remove stopwords  ====================
+
+data(stop_words)
+stop_words
+
+
+Alexadata = text_df %>% 
+  unnest_tokens(word, text) %>% 
+  #filter(!str_detect(word, "^[0-9]*$")) %>% 
+  anti_join(stop_words)  %>% 
+  distinct()
+
+
+head(Alexadata) 
+```
+
+
+```{r}
+# Count Tokens =============================
+Alexadata %>%
+  count(word, sort = TRUE)
+
+```
+
+
+```{r}
+Alexadata %>%
+  filter(!str_detect(word, "^[0-9]*$")) %>%
+  count(word, sort = TRUE) %>%
+  slice(1:20) %>% 
+  ggplot(aes(reorder(word, n), n, fill = word)) +
+  geom_col()+ coord_flip() + 
+  xlab("words") + 
+  ylab("Word Count")+
+  theme(legend.position = "")+
+  ggtitle("Top 20 Words")
+
+
+```
+
+
+```{r}
+
+Alexadata %>% 
+  count(word, sort = TRUE) %>%
+  mutate(proportion = n / sum(n)) %>% 
+  slice(1:20) %>%
+  ggplot(aes(reorder(word, proportion), proportion, fill = word)) +
+  geom_col()+ coord_flip() + 
+  xlab("words") + 
+  ylab("Word Count")+
+  theme(legend.position = "")+
+  ggtitle("Top 20 Words as a Percent of Total")
+
+
+```
+
+
+```{r}
+
+Alexadata %>%
+  
+  group_by(line) %>% 
+  top_n(10) %>% 
+  ungroup() %>% 
+  slice(1:20) %>% 
+  ggplot(aes(reorder(word, -line), line, fill = word)) +
+  geom_col()+ coord_flip() + 
+  xlab("words") + 
+  ylab("Word Count")+
+  theme(legend.position = "")+
+  ggtitle("Word Importance")
+
+
+
+```
+
+
+```{r}
+#======================================================= #
+# Contribution to Sentiment/Emotion ====================
+# Word Contribution to Sentiment (i.e Pos or Neg):   
+# (aka top 10 words by sentiment)
+
+bing_dict = get_sentiments("bing")
+head(bing_dict)
+
+afinn_dict = get_sentiments("afinn")
+head(afinn_dict)
+
+# Word Contribution to Emotion (i.e 
+# anger, anticipation, disgust, fear, joy, negative, positive,
+# sadness, surprise, trust):   
+
+
+nrc_dict = get_sentiments("nrc")
+head(nrc_dict)
+table(nrc_dict$sentiment)
+
+se = nrc_dict %>% dplyr::select(word, sentiment)
+head(se)
+```
+
+
+```{r}
+
+
+Alexadata %>%
+  inner_join(se) %>% 
+  #count(word, sentiment, sort=TRUE) %>% 
+  group_by(sentiment) %>% 
+  count(word, sentiment, sort=TRUE) %>%
+  #dplyr::top_n(15) %>% 
+  ungroup() %>%
+  mutate(word=reorder(word, n)) %>% 
+  ggplot(aes(word, n)) + 
+  geom_col(aes(fill=sentiment)) +
+  facet_wrap(~sentiment, scale="free_y") + 
+  coord_flip()+
+  labs(title = "Emotional Content", subtitle = "Being John Rosen")+
+  theme(legend.position = "none")
+
+```
+
+
+```{r}
+
+Alexadata %>%
+  inner_join(se) %>% 
+  count(word, sentiment, sort=TRUE) %>% 
+  group_by(sentiment) %>% 
+  dplyr::top_n(15) %>% 
+  ungroup() %>%
+  mutate(word=reorder(word, n)) %>% 
+  ggplot(aes(word, n)) + 
+  geom_col(aes(fill=sentiment), position = "dodge") +
+  coord_flip()+
+  ggtitle("Emotional Words")+
+  theme(legend.position = "bottom")
+
+```
+
+
+```{r}
+
+
+(  se = bing_dict %>% dplyr::select(word, sentiment)  )
+
+Alexa_sent = Alexadata %>%
+  inner_join(se) %>% 
+  count(word, sentiment, sort=TRUE) %>% 
+  #tibble:: rowid_to_column("index") %>%
+  #count(index  %/% 80, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  dplyr::mutate(sentiment = positive - negative)
+
+head(Alexa_sent)
+
+
+```
+
+
+```{r}
+
+Alexa_sent %>% dplyr::count(word, negative, sort = T) %>%
+  top_n(-25, negative) %>%
+  ggplot(aes(reorder(word, -negative), negative, fill = word)) +
+  geom_col(show.legend = FALSE, fill = "darkred") +
+  coord_flip() +labs(title = "Negative Words", x = "", y = "Sentiment Score")+
+  theme_gdocs()
+
+head((arrange(Alexa_sent, desc(sentiment))))
+
+```
+
+
+```{r}
+
+Alexa_sent %>% dplyr::count(word, positive, sort = TRUE) %>%
+  top_n(25, positive) %>%
+  ggplot(aes(reorder(word, positive), positive, fill = n)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +labs(title = "Positive Words" , x = "", y = "Sentiment Score")+
+  theme_gdocs()
+
+
+```
+
+
+```{r}
+#============================================================================= # 
+#Sentiment Index =============================================================
+(  Alexa_sent2 = Alexadata %>%
+     inner_join(se) %>% 
+     count(word, sentiment, sort=TRUE)   )
+
+head(Alexa_sent2)
+
+```
+
+
+```{r}
+Alexa_sent2 %>%
+  #filter(n > 3) %>%
+  #mutate(nn = ifelse(sentiment == "negative", -n, n)) %>%
+  mutate(word = reorder(sentiment, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.text = element_text(face="bold")) +
+  ylab("Contribution to sentiment")  +
+  coord_flip() 
+
+```
+
+
+```{r}
+
+# Sentiment Ratio ===========================
+Alexa_negative <- Alexa_sent2 %>%
+  filter(sentiment == "negative") %>% dplyr::select(n) %>% colSums()
+
+Alexa_positive <- Alexa_sent2 %>%
+  filter(sentiment == "positive") %>% dplyr::select(n) %>% colSums()
+
+
+Alexa_ratio = (Alexa_positive- Alexa_negative)*100/(Alexa_positive+ Alexa_negative)
+
+Alexa_ratio
 
 ```
 
