@@ -1,2 +1,2 @@
-# SentimentAnalysis_AlexaReviews(NLP)
-Amazon Alexa echo product sentiment analysis (Natural Language Processing)
+# SentimentAnalysis_AlexaReviews
+Amazon Alexa echo product sentiment analysis using R programming 
